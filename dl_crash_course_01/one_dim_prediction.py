@@ -3,21 +3,23 @@ from numpy.random import default_rng
 import matplotlib.pyplot as plt
 
 def plot_data(x, y_gt):
+    plt.clf()
     plt.scatter(x, y_gt, color='blue', label='Ground Truth')
     plt.xlabel('Feature')
     plt.ylabel('Label')
     plt.title('1D Dataset')
     plt.legend()
-    plt.show()
+    plt.savefig('ground-truth.png')
 
-def plot_predictions(x, y_gt, y_pred):
+def plot_predictions(x, y_gt, y_pred, filename='predictions.png'):
+    plt.clf()
     plt.scatter(x, y_gt, color='blue', label='Ground Truth')
     plt.scatter(x, y_pred, color='red', label='Predictions', marker='x')
     plt.xlabel('Feature')
     plt.ylabel('Label')
     plt.title('1D Dataset with Predictions')
     plt.legend()
-    plt.show()
+    plt.savefig(filename)
 
 def neuron_class_1d(w0, x):
     return (w0 * x > 0).astype(int)
@@ -30,7 +32,7 @@ if __name__ == "__main__":
     w0 = rng.normal()
     print(f"Initial weight: {w0}")
     y_pred = neuron_class_1d(w0, x)
-    plot_predictions(x, y_gt, y_pred)
+    plot_predictions(x, y_gt, y_pred, filename='initial-predictions.png')
 
     num_samples = len(x)
     num_epochs = 1000
@@ -47,4 +49,4 @@ if __name__ == "__main__":
 
     print(f"Trained weight: {w0}")
     y_pred = neuron_class_1d(w0, x)
-    plot_predictions(x, y_gt, y_pred)
+    plot_predictions(x, y_gt, y_pred, filename='trained-predictions.png')
