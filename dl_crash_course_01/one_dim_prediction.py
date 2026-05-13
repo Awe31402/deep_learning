@@ -25,7 +25,11 @@ def neuron_class_1d(w0, x):
     return (w0 * x > 0).astype(int)
 
 if __name__ == "__main__":
-    (x, y_gt) = load_data_1d('data_class_1d_clean.csv')
+    dataset_to_use = 'noisy'  # Change to 'noisy' for the noisy dataset
+    train_filename = f'data_class_1d_{dataset_to_use}.csv'
+    test_filename = f'data_class_1d_{dataset_to_use}_test.csv'
+
+    (x, y_gt) = load_data_1d(train_filename)
     plot_data(x, y_gt)
 
     rng = default_rng()
@@ -50,3 +54,9 @@ if __name__ == "__main__":
     print(f"Trained weight: {w0}")
     y_pred = neuron_class_1d(w0, x)
     plot_predictions(x, y_gt, y_pred, filename='trained-predictions.png')
+
+    # Verify that the trained model with test data
+    (x_test, y_test) = load_data_1d(test_filename)
+    y_test_pred = neuron_class_1d(w0, x_test)
+    accuracy = (y_test_pred == y_test).mean()
+    print(f"Test Accuracy: {accuracy:.2f}")
