@@ -55,4 +55,5 @@ if __name__ == "__main__":
     (x_test, y_test) = load_data_2d(test_filename)
     y_test_pred = neuron_class_2d(w, x_test)
     accuracy = (y_test_pred == y_test).mean()
+    print(f"Test Accuracy: {accuracy:.2f}")    print(f"Test Accuracy: {accuracy:.2f}")
     print(f"Test Accuracy: {accuracy:.2f}")
