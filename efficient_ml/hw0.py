@@ -114,6 +114,14 @@ for param in model.parameters():
         num_params += param.numel()
 print(f"Total number of trainable parameters: {num_params}")
 
+# what does MACs mean?
+# MACs stands for Multiply-Accumulate Operations,
+# which is a common metric used to measure the
+# computational complexity of a neural network.
+# It counts the number of times a multiplication
+# and an addition are performed during a forward pass through the network.
+# This metric is particularly important for understanding the efficiency of a model,
+# especially when deploying it on resource-constrained devices.
 num_macs = profile_macs(model, torch.zeros(1, 3, 32, 32).cuda())
 print(f"Total number of MACs for a single forward pass: {num_macs}")
 
