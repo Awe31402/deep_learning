@@ -677,7 +677,7 @@ plot_sensitivity_scan(sparsities, accuracies, dense_model_accuracy)
 
 請使用上述靈敏度曲線中的資訊回答以下問題。
 
-![VGG 各層權重剪枝敏感度掃描曲線圖（Validation Accuracy vs. Pruning Sparsity）](/home/awe/disk/deep_learning/efficient_ml/sensitivity_curves.png)
+![VGG 各層權重剪枝敏感度掃描曲線圖（Validation Accuracy vs. Pruning Sparsity）](sensitivity_curves.png)
 
 #### 問題4.1（5分）
 
