@@ -440,12 +440,18 @@ plot_weight_distribution(model)
 不同層的權重分佈有哪些共同特徵？
 
 **您的答案：**
+1. **零均值常態/高斯分佈 (Zero-mean Gaussian/Normal Distribution)**：所有卷積層和全連接層的權重都呈現典型的鐘形常態分佈曲線，其分佈中心高度集中在 0 附近。
+2. **小數值權重佔絕大多數 (Sparsity of large weights)**：絕大多數權重的絕對值都非常小（非常接近 0），只有極少數權重具有較大的絕對值（分佈在兩側極窄的尾部）。
+3. **方差/尺度（Variance/Scale）因層而異**：隨著層數加深，權重的分佈範圍通常會逐漸收窄，特別是全連接層的分佈規模通常比前面卷積層小很多。
 
 ### 問題1.2（5分）
 
 這些特徵如何幫助修剪？
 
 **您的答案：**
+1. **最小化精度干擾**：由於絕大多數權重集中在 0 附近（對前向傳播的特徵活化值貢獻極微），基於幅度的剪枝（Magnitude-based Pruning）可以優先剪除這些數值極小的連接，對網路最終預測準確率的干擾極小。
+2. **巨大的稀疏化潛力**：直方圖中大絕對值權重佔比低，意味著我們可以在不改變網路主要決策邊界的情況下，大膽將 70% ~ 90% 的小權重置為 0，實現高壓縮率。
+3. **動態閾值決定基礎**：常態分佈特性讓我們能利用標準差 $\sigma$ 或百分位數（Percentile，如 `kthvalue`）來為各層量身定制合適的剪枝截斷閾值 $v_{\mathrm{thr}}$，實現層次化的敏感度剪枝。
 
 # 細粒度修剪
 
@@ -510,13 +516,16 @@ def fine_grained_prune(tensor: torch.Tensor, sparsity : float) -> torch.Tensor:
 
     ##################### YOUR CODE STARTS HERE #####################
     # Step 1: calculate the #zeros (please use round())
-    num_zeros = round(0)
+    num_zeros = int(round(num_elements * sparsity))
+    
     # Step 2: calculate the importance of weight
-    importance = 0
+    importance = torch.abs(tensor)
+    
     # Step 3: calculate the pruning threshold
-    threshold = 0
+    threshold = torch.kthvalue(importance.view(-1), num_zeros).values
+    
     # Step 4: get binary mask (1 for nonzeros, 0 for zeros)
-    mask = 0
+    mask = torch.gt(importance, threshold).float()
     ##################### YOUR CODE ENDS HERE #######################
 
     # Step 5: apply mask to prune the tensor
@@ -524,6 +533,23 @@ def fine_grained_prune(tensor: torch.Tensor, sparsity : float) -> torch.Tensor:
 
     return mask
 ```
+
+> [!NOTE]
+> **💡 步驟 1 中有無使用 `round()` 的關鍵差別說明：**
+> 
+> 在計算剪枝的零值個數 `num_zeros` 時，是否使用 `round()` 會對剪枝精度與單元測試結果產生顯著影響：
+> 
+> * **未使用 `round()`（直接無條件捨去，如 `int(N * s)`）**：
+>   * Python 的 `int()` 轉換會直接丟棄浮點數的小數部分（即向零取整 / Floor 截斷）。
+>   * **實例**：在本單元測試中，張量總元素 $N = 25$，目標稀疏度 $s = 0.75$。計算所得為 $25 \times 0.75 = 18.75$。
+>   * 若直接使用 `int(18.75)`，會得到 `18` 個剪枝零點。這使得實際產生的遮罩稀疏度僅為 $18 / 25 = 0.72$，低於目標稀疏度 $0.75$，且會因為與測試中預期的 `0.76` 稀疏度不符而導致測試失敗。
+> 
+> * **使用 `round()`（四捨五入，如 `int(round(N * s))`）**：
+>   * `round()` 會將數值四捨五入到最近的整數。
+>   * **實例**：同樣的 $25 \times 0.75 = 18.75$，經 `round(18.75)` 計算後會四捨五入至 `19.0`，再轉換為整數 `19`。
+>   * 這能剪除 19 個小權重，使實際遮罩的稀疏度達到 $19 / 25 = 0.76$。這是在離散的 25 個元素中，最接近目標稀疏度 $0.75$ 的數值，也是測試順利通過的關鍵。
+> 
+> **結論**：使用 `round()` 能確保剪枝數量與目標稀疏度在離散元素限制下達到最接近的物理近似，避免因直接截斷小數點而造成的稀疏度偏差與測試失敗。
 
 讓我們透過在虛擬張量上應用上面的函數來驗證定義的細粒度修剪的功能。
 

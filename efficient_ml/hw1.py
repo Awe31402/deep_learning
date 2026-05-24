@@ -154,12 +154,32 @@ MiB = 1024 * KiB
 GiB = 1024 * MiB
 
 def fine_grained_pruning(tensor: torch.Tensor, target_sparsity: float) -> torch.Tensor:
-    return torch.tensor([[True, True, False, False, False],
-                         [False, True, False, False, False],
-                         [False, False, False, False, False],
-                         [False, True, False, False, False],
-                         [True, False, False, False, True]])
+    """
+    實作細粒度大小剪枝
+    """
+    # 步驟 1: 計算剪枝後的零數 (num_zeros)
+    num_elements = tensor.numel()
+    num_zeros = int(round(num_elements * target_sparsity))
 
+    # 處理邊界條件
+    if num_zeros == 0:
+        mask = torch.ones_like(tensor, dtype=torch.bool)
+    elif num_zeros >= num_elements:
+        mask = torch.zeros_like(tensor, dtype=torch.bool)
+    else:
+        # 步驟 2: 計算權重張量的「重要性」
+        importance = torch.abs(tensor)
+
+        # 步驟 3: 計算修剪「閾值」
+        threshold = torch.kthvalue(importance.view(-1), num_zeros).values
+
+        # 步驟 4: 根據「閾值」計算剪枝「掩碼」 (mask)
+        mask = torch.gt(importance, threshold)
+
+    # 原處將權重乘以遮罩以應用剪枝 (masked_fill_)
+    tensor.masked_fill_(~mask, 0)
+
+    return mask
 
 def test_fine_grained_prune(
         test_tensor=torch.tensor([[-0.46, -0.40, 0.39, 0.19, 0.37],
@@ -190,7 +210,6 @@ def test_fine_grained_prune(
     plot_matrix(test_tensor, ax_left, "Original Tensor")
 
     sparsity_before_pruning = get_sparisty(test_tensor)
-    # TODO: Implement fine grained pruning
     mask = fine_grained_pruning(test_tensor, target_sparsity)
     sparsity_after_pruning = get_sparisty(test_tensor)
     sparsity_of_mask = get_sparisty(mask)
