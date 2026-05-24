@@ -260,6 +260,74 @@ def plot_weight_distribution(model, output_fig_name="weight_distribution.png",
     plt.savefig(output_fig_name)
 
 
+class FineGrainedPruner:
+    def __init__(self, model, sparsity_dict):
+        self.masks = FineGrainedPruner.prune(model, sparsity_dict)
+
+    @torch.no_grad()
+    def apply(self, model):
+        for name, param in model.named_parameters():
+            if name in self.masks:
+                param *= self.masks[name]
+
+    @staticmethod
+    @torch.no_grad()
+    def prune(model, sparsity_dict):
+        masks = dict()
+        for name, param in model.named_parameters():
+            if param.dim() > 1: # we only prune conv and fc weights
+                masks[name] = fine_grained_pruning(param, sparsity_dict[name])
+        return masks
+
+@torch.no_grad()
+def sensitivity_scan(model, dataloader, scan_step=0.1, scan_start=0.4, scan_end=1.0, verbose=True):
+    sparsities = np.arange(start=scan_start, stop=scan_end, step=scan_step)
+    accuracies = []
+    named_conv_weights = [(name, param) for (name, param) \
+                          in model.named_parameters() if param.dim() > 1]
+    for i_layer, (name, param) in enumerate(named_conv_weights):
+        param_clone = param.detach().clone()
+        accuracy = []
+        for sparsity in tqdm(sparsities, desc=f'scanning {i_layer}/{len(named_conv_weights)} weight - {name}'):
+            fine_grained_pruning(param.detach(), target_sparsity=sparsity)
+            acc = evaluate(model, dataloader)
+            if verbose:
+                print(f'\rsparsity={sparsity:.2f}: accuracy={acc:.2f}%', end='')
+            # restore
+            param.copy_(param_clone)
+            accuracy.append(acc)
+        if verbose:
+            print(f'\rsparsity=[{",".join(["{:.2f}".format(x) for x in sparsities])}]: accuracy=[{", ".join(["{:.2f}%".format(x) for x in accuracy])}]')
+        accuracies.append(accuracy)
+    return sparsities, accuracies
+
+def plot_sensitivity_scan(model, sparsities, accuracies, dense_model_accuracy, output_fig_name="sensitivity_curves.png"):
+    lower_bound_accuracy = 100 - (100 - dense_model_accuracy) * 1.5
+    fig, axes = plt.subplots(3, int(math.ceil(len(accuracies) / 3)),figsize=(15,8))
+    axes = axes.ravel()
+    plot_index = 0
+    for name, param in model.named_parameters():
+        if param.dim() > 1:
+            ax = axes[plot_index]
+            curve = ax.plot(sparsities, accuracies[plot_index])
+            line = ax.plot(sparsities, [lower_bound_accuracy] * len(sparsities))
+            ax.set_xticks(np.arange(start=0.4, stop=1.0, step=0.1))
+            ax.set_ylim(80, 95)
+            ax.set_title(name)
+            ax.set_xlabel('sparsity')
+            ax.set_ylabel('top-1 accuracy')
+            ax.legend([
+                'accuracy after pruning',
+                f'{lower_bound_accuracy / dense_model_accuracy * 100:.0f}% of dense model accuracy'
+            ])
+            ax.grid(axis='x')
+            plot_index += 1
+    fig.suptitle('Sensitivity Curves: Validation Accuracy vs. Pruning Sparsity')
+    fig.tight_layout()
+    fig.subplots_adjust(top=0.925)
+    plt.savefig(output_fig_name)
+
+
 if __name__ == "__main__":
     # get pretrained model
     checkpoint_url = "https://hanlab18.mit.edu/files/course/labs/vgg.cifar.pretrained.pth"
@@ -302,3 +370,19 @@ if __name__ == "__main__":
 
     # test fine grained pruning
     test_fine_grained_prune()
+
+    # Question 3
+    print("\n--- Question 3 ---")
+    target_sparsity = 0.60
+    test_fine_grained_prune(target_sparsity=target_sparsity, target_nonzeros=10)
+
+    # Cells 46 to 54
+    print("\n--- Sensitivity Scan (Cells 51-54) ---")
+    dense_model_accuracy = evaluate(model, dataloader['test'])
+    print(f"dense model has accuracy={dense_model_accuracy:.2f}%")
+
+    sparsities, accuracies = sensitivity_scan(
+        model, dataloader['test'], scan_step=0.1, scan_start=0.4, scan_end=1.0)
+    
+    plot_sensitivity_scan(model, sparsities, accuracies, dense_model_accuracy)
+    print("Sensitivity curves saved as sensitivity_curves.png")
