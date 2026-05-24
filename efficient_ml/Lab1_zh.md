@@ -677,6 +677,8 @@ plot_sensitivity_scan(sparsities, accuracies, dense_model_accuracy)
 
 請使用上述靈敏度曲線中的資訊回答以下問題。
 
+![VGG 各層權重剪枝敏感度掃描曲線圖（Validation Accuracy vs. Pruning Sparsity）](/home/awe/disk/deep_learning/efficient_ml/sensitivity_curves.png)
+
 #### 問題4.1（5分）
 
 剪枝稀疏度和模型精確度有什麼關係？ （*即*，當稀疏性變高時，準確度會增加還是減少？）
