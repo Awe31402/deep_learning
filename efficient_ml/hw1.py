@@ -242,8 +242,6 @@ def plot_weight_distribution(model, output_fig_name="weight_distribution.png",
 
 
 if __name__ == "__main__":
-    test_fine_grained_prune()
-
     # get pretrained model
     checkpoint_url = "https://hanlab18.mit.edu/files/course/labs/vgg.cifar.pretrained.pth"
     checkpoint = torch.load(download_url(checkpoint_url), map_location="cpu")
@@ -282,3 +280,6 @@ if __name__ == "__main__":
 
     # Observe weighting distribution of the pretrained model
     plot_weight_distribution(model)
+
+    # test fine grained pruning
+    test_fine_grained_prune()
