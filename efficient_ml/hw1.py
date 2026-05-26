@@ -327,12 +327,27 @@ def plot_sensitivity_scan(model, sparsities, accuracies, dense_model_accuracy, o
     fig.subplots_adjust(top=0.925)
     plt.savefig(output_fig_name)
 
+def plot_num_parameters_distribution(model, filename="num_parameters_distribution.png"):
+    num_parameters = dict()
+    for name, param in model.named_parameters():
+        if param.dim() > 1:
+            num_parameters[name] = param.numel()
+    fig = plt.figure(figsize=(8, 6))
+    plt.grid(axis='y')
+    plt.bar(list(num_parameters.keys()), list(num_parameters.values()))
+    plt.title('#Parameter Distribution')
+    plt.ylabel('Number of Parameters')
+    plt.xticks(rotation=60)
+    plt.tight_layout()
+    plt.savefig(filename)
+
 
 if __name__ == "__main__":
     # get pretrained model
     checkpoint_url = "https://hanlab18.mit.edu/files/course/labs/vgg.cifar.pretrained.pth"
     checkpoint = torch.load(download_url(checkpoint_url), map_location="cpu")
     model = VGG().cuda()
+    # model = VGG()
     print(f"=> loading checkpoint '{checkpoint_url}'")
     model.load_state_dict(checkpoint['state_dict'])
     recover_model = lambda: model.load_state_dict(checkpoint['state_dict'])
@@ -386,3 +401,5 @@ if __name__ == "__main__":
     
     plot_sensitivity_scan(model, sparsities, accuracies, dense_model_accuracy)
     print("Sensitivity curves saved as sensitivity_curves.png")
+
+    plot_num_parameters_distribution(model)
