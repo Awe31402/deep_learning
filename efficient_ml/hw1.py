@@ -86,6 +86,7 @@ def train(
         criterion: nn.Module,
         optimizer: Optimizer,
         scheduler: LambdaLR,
+        callbacks = None
 ) -> None:
     model.train()
     total_loss = 0.0
@@ -99,6 +100,10 @@ def train(
 
         optimizer.step()
         scheduler.step()
+
+        if callbacks is not None:
+            for callback in callbacks:
+                callback()
 
         total_loss += loss.item() * inputs.size(0)
 
@@ -403,3 +408,60 @@ if __name__ == "__main__":
     print("Sensitivity curves saved as sensitivity_curves.png")
 
     plot_num_parameters_distribution(model)
+
+    # Question 5
+    print("\n--- Question 5 ---")
+    recover_model()
+
+    sparsity_dict = {
+        'backbone.conv0.weight': 0.15,
+        'backbone.conv1.weight': 0.40,
+        'backbone.conv2.weight': 0.60,
+        'backbone.conv3.weight': 0.70,
+        'backbone.conv4.weight': 0.75,
+        'backbone.conv5.weight': 0.85,
+        'backbone.conv6.weight': 0.85,
+        'backbone.conv7.weight': 0.85,
+        'classifier.weight': 0.40,
+    }
+
+    pruner = FineGrainedPruner(model, sparsity_dict)
+    print(f'After pruning with sparsity dictionary')
+    for name, sparsity in sparsity_dict.items():
+        print(f'  {name}: {sparsity:.2f}')
+    print(f'The sparsity of each layer becomes')
+    for name, param in model.named_parameters():
+        if name in sparsity_dict:
+            print(f'  {name}: {get_sparisty(param):.2f}')
+
+    dense_model_size = get_model_size(model)
+    sparse_model_size = get_model_size(model, count_nonzero_only=True)
+    print(f"Sparse model has size={sparse_model_size / MiB:.2f} MiB = {sparse_model_size / dense_model_size * 100:.2f}% of dense model size")
+    sparse_model_accuracy = evaluate(model, dataloader['test'])
+    print(f"Sparse model has accuracy={sparse_model_accuracy:.2f}% before fine-tuning")
+
+    # Fine-tune the model
+    num_finetune_epochs = 5
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=1e-4)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, num_finetune_epochs)
+    criterion = nn.CrossEntropyLoss()
+
+    best_sparse_model_checkpoint = dict()
+    best_accuracy = 0
+    print(f'Finetuning Fine-grained Pruned Sparse Model')
+    for epoch in range(num_finetune_epochs):
+        train(model, dataloader['train'], criterion, optimizer, scheduler,
+              callbacks=[lambda: pruner.apply(model)])
+        accuracy = evaluate(model, dataloader['test'])
+        is_best = accuracy > best_accuracy
+        if is_best:
+            best_sparse_model_checkpoint['state_dict'] = copy.deepcopy(model.state_dict())
+            best_accuracy = accuracy
+        print(f'    Epoch {epoch+1} Accuracy {accuracy:.2f}% / Best Accuracy: {best_accuracy:.2f}%')
+
+    # Load the best sparse model checkpoint and show final accuracy
+    model.load_state_dict(best_sparse_model_checkpoint['state_dict'])
+    final_sparse_model_size = get_model_size(model, count_nonzero_only=True)
+    print(f"Sparse model final size={final_sparse_model_size / MiB:.2f} MiB = {final_sparse_model_size / dense_model_size * 100:.2f}% of dense model size")
+    final_sparse_model_accuracy = evaluate(model, dataloader['test'])
+    print(f"Sparse model accuracy after fine-tuning: {final_sparse_model_accuracy:.2f}%")
