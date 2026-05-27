@@ -388,6 +388,19 @@ def apply_channel_sorting(model):
     return model
 
 @torch.no_grad()
+def measure_latency(model, dummy_input, n_warmup=20, n_test=100):
+    model.eval()
+    # warmup
+    for _ in range(n_warmup):
+        _ = model(dummy_input)
+    # real test
+    t1 = time.time()
+    for _ in range(n_test):
+        _ = model(dummy_input)
+    t2 = time.time()
+    return (t2 - t1) / n_test  # average latency
+
+@torch.no_grad()
 def sensitivity_scan(model, dataloader, scan_step=0.1, scan_start=0.4, scan_end=1.0, verbose=True):
     sparsities = np.arange(start=scan_start, stop=scan_end, step=scan_step)
     accuracies = []
@@ -603,12 +616,83 @@ if __name__ == "__main__":
     channel_pruning_ratio = 0.3  # pruned-out ratio
 
     print(" * Without sorting...")
-    pruned_model = channel_prune(model, channel_pruning_ratio)
-    pruned_model_accuracy = evaluate(pruned_model, dataloader['test'])
-    print(f"pruned model has accuracy={pruned_model_accuracy:.2f}%")
+    pruned_model_unsorted = channel_prune(model, channel_pruning_ratio)
+    pruned_model_unsorted_accuracy = evaluate(pruned_model_unsorted, dataloader['test'])
+    print(f"pruned model (unsorted) has accuracy={pruned_model_unsorted_accuracy:.2f}% before finetuning")
+
+    # Finetuning the unsorted pruned model
+    print("Finetuning Unsorted Pruned Model...")
+    num_finetune_epochs = 5
+    optimizer = torch.optim.SGD(pruned_model_unsorted.parameters(), lr=0.01, momentum=0.9, weight_decay=1e-4)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, num_finetune_epochs)
+    criterion = nn.CrossEntropyLoss()
+
+    best_accuracy_unsorted = 0
+    for epoch in range(num_finetune_epochs):
+        train(pruned_model_unsorted, dataloader['train'], criterion, optimizer, scheduler)
+        accuracy = evaluate(pruned_model_unsorted, dataloader['test'])
+        is_best = accuracy > best_accuracy_unsorted
+        if is_best:
+            best_accuracy_unsorted = accuracy
+        print(f'Epoch {epoch+1} Accuracy {accuracy:.2f}% / Best Accuracy: {best_accuracy_unsorted:.2f}%')
+    print(f"pruned model (unsorted) has accuracy={best_accuracy_unsorted:.2f}% after finetuning")
 
     print(" * With sorting...")
     sorted_model = apply_channel_sorting(model)
-    pruned_model = channel_prune(sorted_model, channel_pruning_ratio)
-    pruned_model_accuracy = evaluate(pruned_model, dataloader['test'])
-    print(f"pruned model has accuracy={pruned_model_accuracy:.2f}%")
+    pruned_model_sorted = channel_prune(sorted_model, channel_pruning_ratio)
+    pruned_model_sorted_accuracy = evaluate(pruned_model_sorted, dataloader['test'])
+    print(f"pruned model (sorted) has accuracy={pruned_model_sorted_accuracy:.2f}% before finetuning")
+
+    # Finetuning the sorted pruned model
+    print("Finetuning Sorted Pruned Model...")
+    optimizer = torch.optim.SGD(pruned_model_sorted.parameters(), lr=0.01, momentum=0.9, weight_decay=1e-4)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, num_finetune_epochs)
+
+    best_accuracy_sorted = 0
+    for epoch in range(num_finetune_epochs):
+        train(pruned_model_sorted, dataloader['train'], criterion, optimizer, scheduler)
+        accuracy = evaluate(pruned_model_sorted, dataloader['test'])
+        is_best = accuracy > best_accuracy_sorted
+        if is_best:
+            best_accuracy_sorted = accuracy
+        print(f'Epoch {epoch+1} Accuracy {accuracy:.2f}% / Best Accuracy: {best_accuracy_sorted:.2f}%')
+    print(f"pruned model (sorted) has accuracy={best_accuracy_sorted:.2f}% after finetuning")
+
+    # Measure Pruning Acceleration (Cell 93)
+    print("\n--- Question 7 - Pruning Acceleration ---")
+    table_template = "{:<15} {:<15} {:<15} {:<15}"
+    print(table_template.format('', 'Original', 'Pruned', 'Reduction Ratio'))
+
+    # 1. measure the latency of the original model and the pruned model on CPU
+    #   which simulates inference on an edge device
+    dummy_input = torch.randn(1, 3, 32, 32).to('cpu')
+    pruned_model_sorted = pruned_model_sorted.to('cpu')
+    model = model.to('cpu')
+
+    pruned_latency = measure_latency(pruned_model_sorted, dummy_input)
+    original_latency = measure_latency(model, dummy_input)
+    print(table_template.format('Latency (ms)',
+                                round(original_latency * 1000, 1),
+                                round(pruned_latency * 1000, 1),
+                                round(original_latency / pruned_latency, 1)))
+
+    # 2. measure the computation (MACs)
+    original_macs = get_model_macs(model, dummy_input)
+    pruned_macs = get_model_macs(pruned_model_sorted, dummy_input)
+    print(table_template.format('MACs (M)',
+                                round(original_macs / 1e6),
+                                round(pruned_macs / 1e6),
+                                round(original_macs / pruned_macs, 1)))
+
+    # 3. measure the model size (params)
+    original_param = get_num_parameters(model)
+    pruned_param = get_num_parameters(pruned_model_sorted)
+    print(table_template.format('Param (M)',
+                                round(original_param / 1e6, 2),
+                                round(pruned_param / 1e6, 2),
+                                round(original_param / pruned_param, 1)))
+
+    # Put models back to their original device
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    pruned_model_sorted = pruned_model_sorted.to(device)
+    model = model.to(device)
