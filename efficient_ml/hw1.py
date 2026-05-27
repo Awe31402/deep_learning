@@ -17,8 +17,8 @@ from torchvision.datasets import *
 from torchvision.transforms import *
 from tqdm.auto import tqdm
 
-assert torch.cuda.is_available(), \
-    "CUDA is not available. Please check your GPU settings."
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(f"Using device: {device}")
 
 random.seed(0)
 np.random.seed(0)
@@ -91,7 +91,7 @@ def train(
     model.train()
     total_loss = 0.0
     for inputs, targets in tqdm(dataflow, desc="Training", leave=False):
-        inputs, targets = inputs.cuda(), targets.cuda()
+        inputs, targets = inputs.to(device), targets.to(device)
 
         optimizer.zero_grad()
         outputs = model(inputs)
@@ -118,7 +118,7 @@ def evaluate(model: nn.Module, dataflow: DataLoader) -> float:
     num_correct = 0
 
     for inputs, targets in tqdm(dataflow, desc="eval", leave=False):
-        inputs, targets = inputs.cuda(), targets.cuda()
+        inputs, targets = inputs.to(device), targets.to(device)
 
         outputs = model(inputs)
         predictions = outputs.argmax(dim=1)
@@ -467,7 +467,7 @@ if __name__ == "__main__":
     # get pretrained model
     checkpoint_url = "https://hanlab18.mit.edu/files/course/labs/vgg.cifar.pretrained.pth"
     checkpoint = torch.load(download_url(checkpoint_url), map_location="cpu")
-    model = VGG().cuda()
+    model = VGG().to(device)
     # model = VGG()
     print(f"=> loading checkpoint '{checkpoint_url}'")
     model.load_state_dict(checkpoint['state_dict'])
@@ -588,7 +588,7 @@ if __name__ == "__main__":
     dense_model_accuracy = evaluate(model, dataloader['test'])
     print(f"dense model has accuracy={dense_model_accuracy:.2f}%")
 
-    dummy_input = torch.randn(1, 3, 32, 32).cuda()
+    dummy_input = torch.randn(1, 3, 32, 32).to(device)
     pruned_model = channel_prune(model, prune_ratio=0.3)
     pruned_macs = get_model_macs(pruned_model, dummy_input)
     assert pruned_macs == 305388064
