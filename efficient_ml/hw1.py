@@ -338,6 +338,55 @@ def channel_prune(model: nn.Module,
 
     return model
 
+# function to sort the channels from important to non-important
+def get_input_channel_importance(weight):
+    in_channels = weight.shape[1]
+    importances = []
+    # compute the importance for each input channel
+    for i_c in range(weight.shape[1]):
+        channel_weight = weight.detach()[:, i_c]
+        ##################### YOUR CODE STARTS HERE #####################
+        importance = torch.norm(channel_weight)
+        ##################### YOUR CODE ENDS HERE #####################
+        importances.append(importance.view(1))
+    return torch.cat(importances)
+
+@torch.no_grad()
+def apply_channel_sorting(model):
+    model = copy.deepcopy(model)  # do not modify the original model
+    # fetch all the conv and bn layers from the backbone
+    all_convs = [m for m in model.backbone if isinstance(m, nn.Conv2d)]
+    all_bns = [m for m in model.backbone if isinstance(m, nn.BatchNorm2d)]
+    # iterate through conv layers
+    for i_conv in range(len(all_convs) - 1):
+        # each channel sorting index, we need to apply it to:
+        # - the output dimension of the previous conv
+        # - the previous BN layer
+        # - the input dimension of the next conv (we compute importance here)
+        prev_conv = all_convs[i_conv]
+        prev_bn = all_bns[i_conv]
+        next_conv = all_convs[i_conv + 1]
+        # note that we always compute the importance according to input channels
+        importance = get_input_channel_importance(next_conv.weight)
+        # sorting from large to small
+        sort_idx = torch.argsort(importance, descending=True)
+
+        # apply to previous conv and its following bn
+        prev_conv.weight.copy_(torch.index_select(
+            prev_conv.weight.detach(), 0, sort_idx))
+        for tensor_name in ['weight', 'bias', 'running_mean', 'running_var']:
+            tensor_to_apply = getattr(prev_bn, tensor_name)
+            tensor_to_apply.copy_(
+                torch.index_select(tensor_to_apply.detach(), 0, sort_idx)
+            )
+
+        # apply to the next conv input (hint: one line of code)
+        ##################### YOUR CODE STARTS HERE #####################
+        next_conv.weight.copy_(torch.index_select(next_conv.weight.detach(), 1, sort_idx))
+        ##################### YOUR CODE ENDS HERE #####################
+
+    return model
+
 @torch.no_grad()
 def sensitivity_scan(model, dataloader, scan_step=0.1, scan_start=0.4, scan_end=1.0, verbose=True):
     sparsities = np.arange(start=scan_start, stop=scan_end, step=scan_step)
@@ -532,5 +581,34 @@ if __name__ == "__main__":
     assert pruned_macs == 305388064
     print('* Check passed. Right MACs for the pruned model.')
 
+    pruned_model_accuracy = evaluate(pruned_model, dataloader['test'])
+    print(f"pruned model has accuracy={pruned_model_accuracy:.2f}%")
+
+    # Question 7
+    print("\n--- Question 7 ---")
+    print('Before sorting...')
+    dense_model_accuracy = evaluate(model, dataloader['test'])
+    print(f"dense model has accuracy={dense_model_accuracy:.2f}%")
+
+    print('After sorting...')
+    sorted_model = apply_channel_sorting(model)
+    sorted_model_accuracy = evaluate(sorted_model, dataloader['test'])
+    print(f"sorted model has accuracy={sorted_model_accuracy:.2f}%")
+
+    # make sure accuracy does not change after sorting, since it is
+    # equivalent transform
+    assert abs(sorted_model_accuracy - dense_model_accuracy) < 0.1
+    print('* Check passed.')
+
+    channel_pruning_ratio = 0.3  # pruned-out ratio
+
+    print(" * Without sorting...")
+    pruned_model = channel_prune(model, channel_pruning_ratio)
+    pruned_model_accuracy = evaluate(pruned_model, dataloader['test'])
+    print(f"pruned model has accuracy={pruned_model_accuracy:.2f}%")
+
+    print(" * With sorting...")
+    sorted_model = apply_channel_sorting(model)
+    pruned_model = channel_prune(sorted_model, channel_pruning_ratio)
     pruned_model_accuracy = evaluate(pruned_model, dataloader['test'])
     print(f"pruned model has accuracy={pruned_model_accuracy:.2f}%")
