@@ -41,13 +41,13 @@ $$f(x; \mathbf{W}_1, \mathbf{W}_2, \mathbf{b}_1, \mathbf{b}_2) = \mathbf{W}_2 \t
        * (B) 關於 $l$ 為線性 (Linear in $l$)
        * (C) 關於 $l$ 為多項式 (polynomial in $l$)
        * (D) 關於 $l$ 為指數級 (exponential in $l$)
-       
+
        **提示 (Hint)**：
        * 很難推導出精確答案，因此請專注於漸近行為 (asymptotics)。
        * 不可微點與線性區域 (linear regions) 有何關係？
        * 每個神經元都是前一層輸出的一個分割超平面 (separating hyperplane)。
        * 假設前一層的每個線性區域都被當前層的某個超平面分割（成兩個）。增加一層會如何影響線性區域的數量？
-       
+
      * iv. 回想課堂上提到的，具有足夠寬度 $k$ 的 2 層網路（$l = 2$）是一個萬能逼近器 (universal approximator)。基於您對前面問題的回答，更深層的 ReLU 網路（$l > 2$）在逼近某些函數時，是否可能（在神經元 / 隱藏單元總數方面）更有效率？
    * (d) **(1分)** 一般情況下，如果使用 $\tanh$ 非線性激活函數代替 ReLU，該函數在每個輸入點都可微嗎？如果是，為什麼？如果不是，請重新回答 (c) 部分的子問題。
 
@@ -86,7 +86,7 @@ $$f(x; \mathbf{W}_1, \mathbf{W}_2, \mathbf{b}_1, \mathbf{b}_2) = \mathbf{W}_2 \t
    請注意，$\mathbf{x}, \mathbf{y}, \mathbf{u}$ 和 $\mathbf{v}$ 必須都是 $\mathbb{R}^d$ 中的向量，這些方程才有意義。由於 $\|\mathbf{v}\|_2^2$ 表示向量 $\mathbf{v}$ 的標準平方歐幾里得範數 (squared Euclidean norm)，因此 $\mathcal{L}$ 是一個純量。
    * (a) **(1分)** 證明：
      $$\frac{\partial \mathcal{L}}{\partial \mathbf{W}_{ij}} = \sum_{m=1}^d \mathbf{v}_m \cdot \frac{\partial \mathbf{v}_m}{\partial \mathbf{W}_{ij}}$$
-     
+
    以與 (a) 部分類似的方式，可以推導出以下額外的關係式：
    * $$\frac{\partial \mathbf{v}_m}{\partial \mathbf{W}_{ij}} = \frac{\partial \mathbf{u}_m}{\partial \mathbf{W}_{ij}} + \delta_{im} \cdot \mathbf{u}_j + \sum_{l=1}^d \mathbf{W}_{ml} \frac{\partial \mathbf{u}_l}{\partial \mathbf{W}_{ij}}$$
    * $$\frac{\partial \mathbf{y}_k}{\partial \mathbf{W}_{ij}} = \delta_{ik} \mathbf{x}_j$$
@@ -95,24 +95,24 @@ $$f(x; \mathbf{W}_1, \mathbf{W}_2, \mathbf{b}_1, \mathbf{b}_2) = \mathbf{W}_2 \t
    * $$\frac{\partial \mathbf{u}_l}{\partial \mathbf{y}_k} = \delta_{lk} \cdot \Theta(\mathbf{y}_k)$$
      其中 $\Theta$ 表示赫維賽德階躍函數 (Heaviside step function)，定義為：
      $$\Theta(\mathbf{y}_k) = \begin{cases} 1 & \text{若 } \mathbf{y}_k \ge 0 \\ 0 & \text{若 } \mathbf{y}_k < 0 \end{cases}$$
-     
+
    * (b) **(2分)** 令 $\frac{\partial \mathcal{L}}{\partial \mathbf{W}}$ 表示其元素為 $\left(\frac{\partial \mathcal{L}}{\partial \mathbf{W}}\right)_{ij} = \frac{\partial \mathcal{L}}{\partial \mathbf{W}_{ij}}$ 的矩陣。使用給定的關係式以及您在 (a) 部分的答案，證明：
      $$\frac{\partial \mathcal{L}}{\partial \mathbf{W}} = \mathbf{v} \otimes \mathbf{u} + \text{diag}(\Theta(\mathbf{y}))(\mathbf{I} + \mathbf{W}^\top)\mathbf{v} \otimes \mathbf{x}$$
      其中 $\otimes$ 是外積 (outer product)，而 $\text{diag}$ 將其輸入塑形為對角矩陣 (diagonal matrix)。
-     
+
    這種對 $\frac{\partial \mathcal{L}}{\partial \mathbf{W}}$ 的表達式優勢在於它很容易在 PyTorch 中編寫程式碼，並且能高效利用矩陣乘法原語，這些原語在 GPU 上有高度優化、並行化的實現。
 
 ---
 
 ## PyTorch (0分)
 
-9. **(不計分；0分)** 在[此處](https://colab.research.google.com/)完成 PyTorch 教學 Colab 筆記本。在繼續下一節之前，您應該至少完成以下筆記本（「張量算術 Tensor Arithmetic」和「網路模組 Network Modules」）。
+9. **(不計分；0分)** 在[此處](https://github.com/davidbau/how-to-read-pytorch/tree/master)完成 PyTorch 教學 Colab 筆記本。在繼續下一節之前，您應該至少完成以下筆記本（「張量算術 Tensor Arithmetic」和「網路模組 Network Modules」）。
 
 ---
 
 ## CIFAR-10 分類 (CIFAR-10 Classification) (12分)
 
-在本節中，我們將在[此 Colab 筆記本](https://colab.research.google.com/)中進行操作，訓練一個網路來分類手寫數字數據集，CIFAR-10 [Krizhevsky, 2009, Torralba et al., 2008]。
+在本節中，我們將在[此 Colab 筆記本](https://colab.research.google.com/drive/1H_Htddamebxg7trHfaO9uGiG_IuCi2b9?usp=sharing)中進行操作，訓練一個網路來分類手寫數字數據集，CIFAR-10 [Krizhevsky, 2009, Torralba et al., 2008]。
 以下問題 10-15 在 Colab 筆記本中有詳細說明。請在同一個 PDF 提交檔案中包含您添加的程式碼行、文字輸出以及所有相關圖表。
 要從 Colab 下載圖表，請在按住 Shift 鍵的同時右鍵單擊圖像。
 
