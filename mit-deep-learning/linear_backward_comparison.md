@@ -96,3 +96,52 @@
 | **輸入梯度 ($dL/dx$)** | $\mathbf{g}_{\texttt{in}} = \mathbf{g}_{\texttt{out}}\mathbf{W}$ | `dLdout @ weight` | 兩者完全等價。 |
 | **權重梯度 ($dL/dW$)** | $\frac{\partial J}{\partial \mathbf{W}} = \mathbf{x}_{\texttt{in}}\mathbf{g}_{\texttt{out}}$ (外積，$[N \times M]$) | `dLdout.t() @ x` (維度 $[M \times N]$) | 程式碼直接計算符合權重形狀的梯度，免去了更新時的轉置步驟，並完成批次累加。 |
 | **偏置梯度 ($dL/db$)** | $\frac{\partial J}{\partial \mathbf{b}} = \mathbf{g}_{\texttt{out}}$ | `dLdout.sum(dim=0)` | 程式碼在 Batch 維度上對偏置梯度求和。 |
+
+---
+
+## 5. 鏈式法則中 $\mathbf{g}_{\text{out}}$ 與 $\mathbf{g}_{\text{in}}$ 的等價對應分析
+
+針對多層網路參數 $\theta_1$ 和 $\theta_2$ 梯度的鏈式法則展開式：
+$$ \begin{aligned}
+\frac{\partial J}{\partial \theta_1}
+&=
+ \frac{\partial J}{\partial \mathbf{x}_L}
+ \frac{\partial \mathbf{x}_L}{\partial \mathbf{x}_{L-1}}
+ \cdots
+ \frac{\partial \mathbf{x}_3}{\partial \mathbf{x}_2}
+\,
+\frac{\partial \mathbf{x}_2}{\partial \mathbf{x}_1}
+\frac{\partial \mathbf{x}_1}{\partial \theta_1}
+\\
+\frac{\partial J}{\partial \theta_2}
+&=
+ \frac{\partial J}{\partial \mathbf{x}_L}
+ \frac{\partial \mathbf{x}_L}{\partial \mathbf{x}_{L-1}}
+ \cdots
+ \frac{\partial \mathbf{x}_3}{\partial \mathbf{x}_2}
+\,
+\frac{\partial \mathbf{x}_2}{\partial \theta_2}
+\end{aligned} $$
+
+在此展開式中，教科書反向傳播的 $\mathbf{g}_{\text{out}}$ 與 $\mathbf{g}_{\text{in}}$ 的等價項與實體意義映射如下：
+
+### A. 第二層（Layer 2，輸出為 $\mathbf{x}_2$，輸入為 $\mathbf{x}_1$，參數為 $\theta_2$）
+
+* **$\mathbf{g}_{\text{out}}$ (第二層輸出端的梯度，即 $\mathbf{g}_2$)**：
+  $$ \mathbf{g}_{\text{out}} = \frac{\partial J}{\partial \mathbf{x}_2} = \frac{\partial J}{\partial \mathbf{x}_L} \frac{\partial \mathbf{x}_L}{\partial \mathbf{x}_{L-1}} \cdots \frac{\partial \mathbf{x}_3}{\partial \mathbf{x}_2} $$
+  * **解釋**：這是從後續深層（第 3 層到最後一層 $L$）一路反向傳遞回來、送達第二層輸出端的梯度。它是兩道參數梯度公式中**完全被共享的共通項**。
+* **$\mathbf{g}_{\text{in}}$ (第二層輸入端的梯度，即 $\mathbf{g}_1$)**：
+  $$ \mathbf{g}_{\text{in}} = \frac{\partial J}{\partial \mathbf{x}_1} = \underbrace{\left( \frac{\partial J}{\partial \mathbf{x}_L} \frac{\partial \mathbf{x}_L}{\partial \mathbf{x}_{L-1}} \cdots \frac{\partial \mathbf{x}_3}{\partial \mathbf{x}_2} \right)}_{\mathbf{g}_{\text{out}}} \frac{\partial \mathbf{x}_2}{\partial \mathbf{x}_1} = \mathbf{g}_{\text{out}} \frac{\partial \mathbf{x}_2}{\partial \mathbf{x}_1} $$
+  * **解釋**：這是第二層將其接收到的 $\mathbf{g}_{\text{out}}$ 乘上本層局部梯度 $\mathbf{L}_2^{\mathbf{x}} = \frac{\partial \mathbf{x}_2}{\partial \mathbf{x}_1}$ 後，準備向前傳遞給第一層的梯度。
+* **參數梯度公式等價性**：
+  $$ \frac{\partial J}{\partial \theta_2} = \mathbf{g}_{\text{out}} \mathbf{L}_2^{\theta} = \mathbf{g}_2 \frac{\partial \mathbf{x}_2}{\partial \theta_2} $$
+
+### B. 第一層（Layer 1，輸出為 $\mathbf{x}_1$，輸入為 $\mathbf{x}_0$，參數為 $\theta_1$）
+
+當誤差信號繼續往回傳播到第一層時：
+
+* **$\mathbf{g}_{\text{out}}$ (第一層輸出端的梯度，即 $\mathbf{g}_1$)**：
+  $$ \mathbf{g}_{\text{out}} = \frac{\partial J}{\partial \mathbf{x}_1} = \mathbf{g}_{\text{in}}^{(2)} = \left( \frac{\partial J}{\partial \mathbf{x}_L} \frac{\partial \mathbf{x}_L}{\partial \mathbf{x}_{L-1}} \cdots \frac{\partial \mathbf{x}_3}{\partial \mathbf{x}_2} \right) \frac{\partial \mathbf{x}_2}{\partial \mathbf{x}_1} $$
+  * **解釋**：前一層（第二層）計算出的輸入梯度 $\mathbf{g}_{\text{in}}^{(2)}$，在回到當前層時即成為本層的輸出端梯度 $\mathbf{g}_{\text{out}}$。
+* **參數梯度公式等價性**：
+  $$ \frac{\partial J}{\partial \theta_1} = \mathbf{g}_1 \frac{\partial \mathbf{x}_1}{\partial \theta_1} = \mathbf{g}_{\text{out}} \mathbf{L}_1^{\theta} $$
