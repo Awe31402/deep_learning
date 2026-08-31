@@ -1,0 +1,11 @@
+
+*data*
+*.pth
+
+# EfficientML 課程投影片（Lec01 有 305MB，超過 GitHub 100MB 上限）
+efficient_ml/Lec*.pdf
+
+# 本機工具與素材目錄
+.books/
+.antigravitycli/
+.skills/
