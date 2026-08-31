@@ -1,6 +1,6 @@
 # Neural Architecture Search 完整筆記（MIT 6.5940 Lecture 7 & 8 + Lab 3）
 
-> 來源：EfficientML.ai Fall 2023 Lecture 07/08 的逐字稿與投影片（78 + 103 頁）、`Lab3_zh.md`、`hw3.py`。
+> 來源：EfficientML.ai Fall 2023 Lecture 07/08 的逐字稿與投影片（`Lec07-Neural-Architecture-Search-I.pdf` 76 頁、`Lec08-Neural-Architecture-Search-II.pdf` 105 頁）、`Lab3_zh.md`、`hw3.py`。
 > 論文連結指向同目錄的 `nas-papers/`，編號即該目錄的建議閱讀順序。
 
 ---
@@ -18,9 +18,10 @@
 - [8. Hardware-aware NAS](#8-hardware-aware-nas)
 - [9. Once-for-All](#9-once-for-all)
 - [10. 神經網路 × 加速器協同搜尋（NAAS）](#10-神經網路--加速器協同搜尋naas)
-- [11. NAS 演進史](#11-nas-演進史)
-- [12. Lab 3 實作對照](#12-lab-3-實作對照)
-- [13. 易錯點與實作細節](#13-易錯點與實作細節)
+- [11. NAS 的實際應用](#11-nas-的實際應用)
+- [12. NAS 演進史](#12-nas-演進史)
+- [13. Lab 3 實作對照](#13-lab-3-實作對照)
+- [14. 易錯點與實作細節](#14-易錯點與實作細節)
 - [附錄 A：公式速查](#附錄-a公式速查)
 - [附錄 B：關鍵數字速查](#附錄-b關鍵數字速查)
 
@@ -189,6 +190,8 @@ M=5, N=2, B=5  →  3.2 × 10^11
 
 沒有普適答案 → 正是該交給 NAS 決定的事。
 
+**投影片用的骨幹已經是 hybrid CNN-Transformer**（p48–50）：4 個 stage，解析度 `C1×160×160 → C2×80×80 → C3×40×40 → C4×20×20`，**前段用 MBConv（depthwise），後段換成 Attention + FFN**，每個 stage 重複 `×L1 … ×L4`。三張投影片分別把 **depth（改 L）／resolution（改 H×W）／width（改 C）** 標成可搜維度——也就是說 network-level 搜尋空間的示範對象已經不是純 CNN，而是**混合架構**。
+
 **Topology 搜尋（Auto-DeepLab）**：每層可以選擇「繼續下採樣 / 維持解析度 / 上採樣」，構成一張網格；沿藍色節點的每條路徑都對應一個架構。U-Net、Stacked Hourglass、DeepLabV3 都只是這張網格中的特定路徑。
 
 論文：[33-auto-deeplab.pdf](nas-papers/33-auto-deeplab.pdf)
@@ -205,12 +208,25 @@ M=5, N=2, B=5  →  3.2 × 10^11
 | STM32F746 | 320 KB SRAM | 1 MB Flash |
 | STM32F412 | 256 KB SRAM | 1 MB Flash |
 
+**為什麼 MCU 要另外設計搜尋空間**（投影片 p54 的框架）：
+
+| 場景 | 約束 |
+|---|---|
+| **Mobile AI** | Latency + Energy |
+| **TinyML** | Latency + Energy + **Memory** ← **多出來的這一項才是關鍵** |
+
 **TinyNAS 的啟發式**：`computation is cheap, memory movement is expensive`
 → 在**相同記憶體約束**下，能塞進越多 FLOPs 的設計空間，容量越大、越可能高準確率。
 
 作法：對每個候選設計空間（width × resolution 的組合）隨機取樣一堆架構，畫 **FLOPs 的累積分布（CDF）**，比較各空間的 top-20% FLOPs。完全**不需要訓練**，只要算 MAC 公式。
 
 實測：`width 0.5 / resolution 144` 的空間 top-20% 可達 50M FLOPs（對照組僅 32M），最終準確率 **78% vs 74%**。
+
+> **投影片的討論題（p57）**：RegNet 與 MCUNet 兩種搜尋空間設計方法，各有什麼優缺點？
+> - **RegNet**：用**已訓練**模型的統計去推導設計原則（如 width 隨深度線性成長），結論可解釋、可跨任務沿用，**但要先付出大量訓練成本**。
+> - **MCUNet / TinyNAS**：**完全不訓練**，只用 FLOPs CDF 在給定記憶體約束下比較空間容量，**極快且直接對準目標硬體**，但這個 proxy（FLOPs 越大越好）只在「同一記憶體約束下」成立，換場景未必適用。
+>
+> 共同的立論：**「搜尋空間設計」比「搜尋策略」更關鍵。**
 
 論文：[25-mcunet.pdf](nas-papers/25-mcunet.pdf)、對照組 [23-regnet.pdf](nas-papers/23-regnet.pdf)
 
@@ -444,6 +460,16 @@ OFA ：train once  → sample subnet(秒) → 評估 → 不滿意 → 再 sampl
 - 在多種平台（Samsung S7 Edge / Google Pixel2 / LG G8 / Intel Xeon CPU / NVIDIA 1080Ti / Xilinx ZU3EG FPGA）上都優於 MobileNetV2/V3
 - 同樣 72.6% top-1 準確率，延遲從約 28 ms 降到約 11 ms
 
+**三支手機上的 ImageNet Top-1 上限**（投影片 p72，同一延遲預算下比較）：
+
+| 平台 | **OFA** | MobileNetV3 | MobileNetV2 |
+|---|---|---|---|
+| Samsung S7 Edge | **76.3** | 75.2 | 73.3 |
+| Google Pixel2 | **76.3** | 75.2 | 73.3 |
+| LG G8 | **76.4** | 75.2 | 73.3 |
+
+（三張圖的 x 軸各自是該裝置的實測延遲；OFA 曲線在**每一個延遲點**都在另外兩條之上，不是只有端點贏。）
+
 **成本的誠實面**（課堂 Q&A 重點）：
 - OFA 的**訓練時間是單一模型的 2–3 倍**——它省的是**推論與部署**，不是訓練
 - 真正的價值有很大一部分是 **storage**：裝置上只需存一個模型，執行期再決定跑哪個子網路，而不是下載大中小好幾份
@@ -492,10 +518,19 @@ Loop order（`CRXKYS` vs `CXYRSK` …）與 parallel dims 這類參數，用 **i
 
 ### 10.4 結果
 
+**EDP Reduction：只搜 sizing vs. 完整 NAAS**（投影片 p90，兩種硬體資源預算 × 兩個模型）：
+
+| 硬體資源 | 模型 | 只搜 Architectural Sizing | **NAAS（+ connectivity + mapping）** |
+|---|---|---|---|
+| **EdgeTPU** | VGG | 2.1 | **7.4** |
+| **EdgeTPU** | MobileNetV2 | 1.2 | **6.0** |
+| **NVDLA1024** | VGG / MobileNetV2 | 1.3 / 1.7 | **2.3 / 2.1** |
+
+> ⚠️ NVDLA 那一列的配對是從投影片長條圖讀出的，配對順序不如 EdgeTPU 那兩組明確；**EdgeTPU 的 2.1 → 7.4 與 1.2 → 6.0 是投影片直接標示的。**
+> 共同結論：**只搜硬體尺寸（sizing）遠遠不夠，把 connectivity 與 mapping 一起搜才拿得到大幅 EDP 縮減**——而這正是 §10.3 importance-based encoding 要解決的問題。
+
 | 設定 | 效果 |
 |---|---|
-| 只搜 architectural sizing | baseline |
-| 加上 connectivity + mapping | EDP 顯著下降（EdgeTPU 資源下 VGG：2.1 → 7.4） |
 | 純硬體架構搜尋 vs 人工設計 | **4.4× EDP 縮減** |
 | 硬體搜尋 + OFA NAS 協同 | 額外 **+2.7% 準確率** |
 
@@ -505,7 +540,132 @@ Loop order（`CRXKYS` vs `CXYRSK` …）與 parallel dims 這類參數，用 **i
 
 ---
 
-## 11. NAS 演進史
+## 11. NAS 的實際應用
+
+> 這是 Lecture 8 總結投影片明列的一項（`NAS applications`），投影片 p93–p100。
+> 核心訊息：**Once-for-All 不是只為 ImageNet 分類服務的技巧，它是一套「訓練一次、按硬體取用」的通用範式**，已經被搬到 NLP、點雲、GAN、姿態估計、量子電路，甚至大型語言模型上。
+
+### 11.1 NLP / Transformer — HAT
+
+**Hardware-Aware Transformers**（Wang et al., ACL 2020）：把 OFA 的想法套到 Transformer，訓練一個 **once-for-all Transformer**，再依目標硬體抽子網路。
+
+**WMT'14 En-Fr，跑在 Raspberry Pi 上**（對照 Evolved Transformer）：
+
+| 指標 | Evolved Transformer | **HAT** | 倍數 |
+|---|---|---|---|
+| **Latency** | 20.9 s | **7.8 s** | **2.7× 快** |
+| **Model Size** | 175 MB | **48 MB** | **3.7× 小** |
+| FLOPs | — | — | **3.2× 少** |
+| **搜尋成本** | — | — | **10,148× 低** |
+| BLEU | — | — | **還高 0.1** |
+
+> HAT 也是 §8.4 那張 latency predictor「預測值幾乎落在 $y=x$」圖的來源。
+
+論文：[27-hat.pdf](nas-papers/27-hat.pdf)
+
+### 11.2 點雲 — SPVNAS
+
+**3D Neural Architecture Search with Point-Voxel Convolution**（Liu et al., TPAMI 2021）。
+
+投影片畫出的是**本講三大工具的完整組裝**：
+
+```
+【超網路訓練】                          【演化搜尋】
+Fine-Grained Channel + Elastic Depth      Sample → Latency Predictor
+Stage I   (depth: 3)                        │  t=12ms → 超標，Re-sample
+Stage II  (depth: 2, 3)                     │  t=10ms → 符合，Keep Arch.
+Stage III (depth: 1, 2, 3)                  │
+        ↓ Uniform Sampling                  ├─ Mutate
+   權重共享（GPU#1 … GPU#N）                └─ Crossover
+```
+
+- **Fine-grained channel + elastic depth** = §9.3 的 elastic width / depth
+- **Uniform sampling** = §12 演進史裡 Single Path One-Shot 的取樣策略
+- **Latency predictor + 演化搜尋** = §8.4 + §5.5
+
+**效果**：MinkowskiNet **3.4 FPS → SPVNAS 9.1 FPS**。
+
+### 11.3 GAN — Anycost GAN
+
+**Anycost GANs for Interactive Image Synthesis and Editing**（Lin et al., CVPR 2021）。
+
+**問題**：GAN 運算極重、很慢，**在 iPad 上做互動式修圖根本卡住**。
+
+**OFA 式解法** —— 訓練一次，得到一整條成本光譜：
+
+| 子網路 | 用途 |
+|---|---|
+| **小子網路** | **低成本、快** → **拖動滑桿時的即時預覽（fast prototyping）** |
+| **大子網路** | 高品質 → **放手後的最終渲染（finalization）** |
+
+> 這是 OFA 一個很漂亮的變形：**同一個使用者、同一個 session，不同「時刻」動態切換子網路** —— 不是為不同裝置各挑一個。
+
+### 11.4 姿態估計 — LitePose
+
+**Lite Pose: Efficient Architecture Design for 2D Human Pose Estimation**（Wang et al., CVPR 2022）：用 hardware-aware NAS 做**端上（on-device）**姿態估計。
+
+### 11.5 端上部署 demo
+
+投影片展示三個實機 demo（都是 OFA 設計的輕量模型）：
+
+- **on-device car/person detection**
+- **on-device segmentation**
+- **on-device gaze estimation**（跑在 Raspberry Pi 上）
+
+### 11.6 ⭐ 量子 AI — QuantumNAS
+
+**QuantumNAS: Noise-Adaptive Search for Robust Quantum Circuits**（Wang et al., HPCA 2022）。
+
+**問題**：**量子雜訊（quantum noise）是量子神經網路的瓶頸** —— 準確率從 **87% 掉到 47%**。
+
+**做法**（和 OFA 結構完全對應）：
+
+| OFA 的概念 | QuantumNAS 的對應 |
+|---|---|
+| 訓練 super **network** | 訓練 super **circuit** |
+| 搜尋 sub-network | 搜尋**對雜訊穩健**的 sub-circuit |
+| Channel pruning（依 L1 norm） | **剪掉 magnitude 小的 quantum gate** |
+
+**結果**（MNIST-4，**真實量子電腦**上）：**47% → 85%**
+
+相關工作：QuantumNAT（雜訊感知訓練）、QOC（量子晶片上訓練）、**TorchQuantum**（開源函式庫，`qmlsys.mit.edu`）
+
+### 11.7 ⭐ 大型語言模型 — Flextron
+
+**Flextron: Many-in-One Flexible Large Language Model**（NVIDIA）—— **OFA 的思想走到 LLM。**
+
+**核心宣稱**：**Same model, same weights, adaptivity during inference.**（同一個模型、同一份權重，推論時才決定用多少）
+
+**部署時「一個模型變多個」：**
+
+| 目標平台 | MLP 用量 | Attention 用量 |
+|---|---|---|
+| **Mobile** | 50% | 10% |
+| **Laptop** | 80% | 40% |
+| **Cloud GPU** | **max** | **max** |
+
+**把一個訓練好的 LLM 轉成 Flextron 的四步：**
+
+```
+Step 0.  拿一個 Pretrained LLM
+Step 1.  Rank heads and neurons        ← 對照 §9.3 的 channel sorting（依重要性排序）
+Step 2.  Group（分組）
+Step 3.  Train router（訓練路由器，決定推論時啟用哪些）
+```
+
+> ⚠️ **這張投影片是後續學期更新的內容**（Flextron 是 2024 年的論文），**2023 秋季的課堂逐字稿裡沒有這一段**。但它正好把整條主線收尾：
+> **2020 OFA（CNN）→ 2020 HAT（Transformer）→ 2024 Flextron（LLM）**，是同一個「train once, get many」的想法在三代模型上的延續。
+
+### 11.8 這一節的 take-away
+
+> **OFA 真正的貢獻不是「一個更好的 ImageNet 模型」，而是把「為每個硬體重新設計＋重新訓練」這件事，
+> 從一個 $O(\text{裝置數})$ 的成本，變成 $O(1)$ 訓練 + $O(\text{裝置數})$ 次「秒級取樣」。**
+>
+> 一旦成本結構改變，它就能被搬到任何「需要多種尺寸、但訓練很貴」的領域 —— 這就是 §11.1–11.7 全部應用的共同邏輯。
+
+---
+
+## 12. NAS 演進史
 
 每一代都是被**上一代的瓶頸**逼出來的：
 
@@ -524,6 +684,7 @@ Loop order（`CRXKYS` vs `CXYRSK` …）與 parallel dims 這類參數，用 **i
 | 2020 | **MCUNet / TinyNAS** [25] | 先用 FLOPs CDF **設計搜尋空間**，再搜模型 | — |
 | 2021–22 | **Zen-NAS** [14] / **GradSign** [15] | **完全不訓練**就評分架構 | 只能排除壞架構，不能保證選出最好的 |
 | 2021 | **NAAS** [26] | 神經網路 × 編譯器 × 加速器**協同搜尋** | — |
+| 2024 | **Flextron**（投影片新增） | 把 OFA 搬到 **LLM**：同一份權重，推論時決定用多少 MLP / Attention | — |
 
 **兩條主軸**貫穿始終：
 1. **降低評估單一架構的成本**：從頭訓練 → 繼承權重 → 共享權重 → 完全不訓練
@@ -533,16 +694,16 @@ Loop order（`CRXKYS` vs `CXYRSK` …）與 parallel dims 這類參數，用 **i
 
 ---
 
-## 12. Lab 3 實作對照
+## 13. Lab 3 實作對照
 
 Lab 3 是把 §9（OFA）+ §5.5（演化搜尋）+ §8.4（效率預測）串起來，目標是搜出能跑在 MCU 上的 VWW 模型。
 
-### 12.1 任務與資料集
+### 13.1 任務與資料集
 
 - **VWW (Visual Wake Words)**：從 MS-COCO 二次採樣的**二元分類**任務（畫面中有沒有人）
 - `build_val_data_loader(..., split)`：`split=0` 是真正的 val set（不可用於搜尋），`split=1` 是 **holdout minival**，用於產生 accuracy dataset 與 **BN 校正**——這個切分是防止搜尋過程洩漏測試集的關鍵設計
 
-### 12.2 OFA 超網路的設計空間
+### 13.2 OFA 超網路的設計空間
 
 ```python
 OFAMCUNets(
@@ -571,7 +732,7 @@ OFAMCUNets(
 
 **驗證 OFA 的核心宣稱**：直接抽取的子網路**不需訓練**即可達到 83.6–88.7% 準確率——這就是 §9 所說的「no retrain, direct deployment」。
 
-### 12.3 `evaluate_sub_network` 的六個步驟
+### 13.3 `evaluate_sub_network` 的六個步驟
 
 ```python
 ofa_network.set_active_subnet(**cfg)        # 1. 依 config 啟動子網路
@@ -585,7 +746,7 @@ acc = validate(subnet, val_loader)          # 6.
 
 ★ **為什麼一定要 `calib_bn`**：super network 的 BN running mean/var 是在「所有子網路混合」的統計下累積的，一旦抽出特定子網路，其 activation 分布與超網路不同。不重新校正，準確率會顯著偏低。這是 OFA 類方法的必要步驟，投影片沒特別強調但實作上必踩。
 
-### 12.4 問題 1：設計空間探索
+### 13.4 問題 1：設計空間探索
 
 **結論（`hw3.py` 的作答）**：四個維度中 **輸入解析度對準確率影響最大**。
 - 解析度 96 → 160：準確率提升數個百分點，MACs 與 peak memory 約以**解析度平方**成長
@@ -593,7 +754,7 @@ acc = validate(subnet, val_loader)          # 6.
 
 → **ks / e 的邊際效益最低**，深度與寬度居中。在 MCU 場景「先給足解析度、再壓 ks/e」通常比「維持大模型但降解析度」划算。這也正是後面搜尋演算法會自動找到的取捨。
 
-### 12.5 問題 2：效率預測器（對應 §8.4）
+### 13.5 問題 2：效率預測器（對應 §8.4）
 
 ```python
 class AnalyticalEfficiencyPredictor:
@@ -608,7 +769,7 @@ class AnalyticalEfficiencyPredictor:
 
     def satisfy_constraint(self, measured, target):
         for key in measured:
-            if key not in target:      # 未指定的約束直接跳過 ← 見 §13 的坑
+            if key not in target:      # 未指定的約束直接跳過 ← 見 §14 的坑
                 continue
             if measured[key] > target[key]:
                 return False
@@ -617,7 +778,7 @@ class AnalyticalEfficiencyPredictor:
 
 這是課堂 latency lookup table 的**解析版（analytical）**：不用實測，直接用 hook 統計 MAC 與 peak activation。對 MCU 而言，**peak activation 就是能不能塞進 SRAM 的直接判準**，比 latency 更關鍵。
 
-### 12.6 問題 3–4：準確率預測器（對應 §6.3 的精神）
+### 13.6 問題 3–4：準確率預測器（對應 §6.3 的精神）
 
 **架構編碼（one-hot）**：因為所有設計超參數都是**離散值**，用數值表示會引入不存在的序關係（同 §10.3 的 index-based encoding 問題）。
 
@@ -647,7 +808,7 @@ layers.append(nn.Linear(self.hidden_size, 1, bias=False))
 
 **為什麼值得**：MLP 推論只要幾毫秒，讓搜尋過程加速**數個數量級**。這正是 OFA 論文中 accuracy predictor 的角色。
 
-### 12.7 問題 5–6：隨機搜尋
+### 13.7 問題 5–6：隨機搜尋
 
 ```python
 def random_valid_sample(self, constraint):
@@ -666,7 +827,7 @@ def run_search(self, constraint, n_subnets=100):
 
 注意約束是用 **rejection sampling** 處理的：一直重抽直到滿足效率約束為止。這也意味著**若可行域極小，這個迴圈會非常慢甚至近乎卡死**（見問題 10）。
 
-### 12.8 問題 7–8：演化搜尋（對應投影片 p71–74）
+### 13.8 問題 7–8：演化搜尋（對應投影片 p71–74）
 
 | 超參數 | 意義 | 課堂對應 |
 |---|---|---|
@@ -719,7 +880,7 @@ else:
 
 **另一個一致的觀察**：搜尋結果幾乎總是把**解析度推到約束允許的上限**，再靠縮小 ks/e/d 把 MACs 與 peak memory 壓回約束內——與問題 1 的結論互相印證。
 
-### 12.9 問題 9：真實世界的多重約束
+### 13.9 問題 9：真實世界的多重約束
 
 | 目標 | 約束 | 準確率門檻 |
 |---|---|---|
@@ -728,7 +889,7 @@ else:
 
 `hw3.py` 對兩者用**不同的 evo_params**：第二個約束可行域窄很多，隨機取樣命中率低，因此族群縮小（100→64）、世代拉長（100→150）、提高 `arch_mutate_prob`（0.1→0.2）——在狹窄可行域內做細緻的局部搜尋，比大範圍交叉更有效。
 
-### 12.10 問題 10：可行性分析
+### 13.10 問題 10：可行性分析
 
 問：設計空間中是否存在滿足下列約束的子網路？
 - **A**：peak activation ≤ 256 KB **且** MACs ≤ 15M
@@ -747,9 +908,9 @@ else:
 
 ---
 
-## 13. 易錯點與實作細節
+## 14. 易錯點與實作細節
 
-### 13.1 `millonMACs` 拼字錯誤會讓約束**靜默失效** ★
+### 14.1 `millonMACs` 拼字錯誤會讓約束**靜默失效** ★
 
 原始 notebook（`Lab3_zh.md` Cell 57）寫的是：
 
@@ -769,19 +930,19 @@ for key in measured:
 
 > 這類「拼錯 key → 約束靜默失效」是設定字典型 API 的通病。若要防禦，可在 `satisfy_constraint` 開頭檢查 `target` 的每個 key 是否都出現在 `measured` 中，否則拋錯。
 
-### 13.2 BN 重新校正不可省略
-見 §12.3。抽出子網路後不做 `calib_bn`，準確率會明顯偏低，且這種錯誤不會有任何例外訊息。
+### 14.2 BN 重新校正不可省略
+見 §13.3。抽出子網路後不做 `calib_bn`，準確率會明顯偏低，且這種錯誤不會有任何例外訊息。
 
-### 13.3 搜尋不可以用真正的 val set
+### 14.3 搜尋不可以用真正的 val set
 `split=1` 的 holdout minival 用於產生 accuracy dataset 與 BN 校正，`split=0` 才是最終評估。混用等同於在測試集上做架構選擇。
 
-### 13.4 Rejection sampling 在窄可行域會卡死
+### 14.4 Rejection sampling 在窄可行域會卡死
 `random_valid_sample` 是 `while True` 無限迴圈。若約束嚴到隨機取樣幾乎不可能命中（例如問題 10 的 B），程式不會報錯而是**永遠跑不完**。`hw3.py` 的 `find_subnet_under_constraint` 因此加上 `n_trials` 上限，回傳 `(None, None)` 表示未命中。
 
-### 13.5 `population` 的累積行為
+### 14.5 `population` 的累積行為
 主迴圈中 `population` 先被截斷成 top-K 父代，再把新產生的 `population_size` 個子代 append 進去，所以下一輪排序時的族群大小是 `parents_size + population_size`。這是刻意的（父代參與下一輪競爭 = elitism），不是 bug。
 
-### 13.6 效率統計的單位
+### 14.6 效率統計的單位
 `get_efficiency` 回傳的是 `millionMACs`（百萬）與 `KBPeakMemory`（KB），與 `count_net_flops` / `count_peak_activation_size` 的原始單位（次數 / bytes）差了 `1e6` 與 `1024`。約束值也要用同樣單位。
 
 ---
@@ -843,9 +1004,12 @@ z = log‖f(x+ε) − f(x)‖ + Σ_i log σ̄_i
 | TinyNAS 設計空間比較 | 78% vs 74%（top-20% FLOPs 50M vs 32M） |
 | MCU 規格 | STM32F746：320 KB SRAM / 1 MB Flash |
 | NAAS vs 人工設計 | 4.4× EDP 縮減，+2.7% 準確率 |
-| HAT (WMT'14 En-Fr, Raspberry Pi) | 2.7× 快、3.7× 小、3.2× 少 FLOPs、搜尋成本 10,148× 低、BLEU +0.1 |
-| SPVNAS | 3.4 → 9.1 FPS |
-| QuantumNAS (MNIST-4, 真實量子電腦) | 47% → 85% |
+| HAT (WMT'14 En-Fr, Raspberry Pi) | 20.9 → 7.8 s（2.7×）、175 → 48 MB（3.7×）、3.2× 少 FLOPs、搜尋成本 10,148× 低、BLEU +0.1 |
+| SPVNAS | MinkowskiNet 3.4 → 9.1 FPS |
+| QuantumNAS (MNIST-4, 真實量子電腦) | 雜訊導致 87% → 47%；QuantumNAS 救回 **85%** |
+| OFA vs MobileNetV3 vs V2（Top-1 上限） | S7 Edge / Pixel2：76.3 vs 75.2 vs 73.3；LG G8：76.4 vs 75.2 vs 73.3 |
+| NAAS EDP Reduction（EdgeTPU） | VGG 2.1 → **7.4**；MobileNetV2 1.2 → **6.0**（只搜 sizing → 完整 NAAS） |
+| Flextron（LLM）部署配置 | Mobile：MLP 50% / Attn 10%；Laptop：80% / 40%；Cloud GPU：max / max |
 | Lab 3 子網路直接抽取準確率 | 83.6–88.7%（無需訓練） |
 | Lab 3 accuracy dataset | 50,000 組（40k 訓練 / 10k 驗證） |
 
