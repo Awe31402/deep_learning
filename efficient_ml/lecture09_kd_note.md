@@ -920,7 +920,7 @@ $$\mathcal{L}_{\text{aug}} = \underbrace{\mathcal{L}(W_t)}_{\text{base：小模�
 | **§4.5 剪枝後用蒸餾 retrain** | **Lecture 4 §7** —— 原本是 fine-tune，現在換成蒸餾 |
 | **§5.3 NetAug 與 OFA 的權重共享** | **Lecture 7-8 §9.3** —— 同樣是共享權重 + 隨機取樣子模型 |
 | **§5.4 NetAug 與 KD 正交** | 兩者可疊加，訓練小模型的標準組合 |
-| **下一講** | **Lecture 10：MCUNet** —— TinyML 的演算法-系統協同設計 |
+| **下一講** | **[Lecture 10：MCUNet](lecture10_mcunet_note.md)** —— TinyML 的演算法-系統協同設計 |
 
 ---
 

@@ -1233,7 +1233,7 @@ z = log‖f(x+ε) − f(x)‖ + Σ_i log σ̄_i
 2. [07-spos.pdf](nas-papers/07-spos.pdf) — OFA 的主要對照組，看清 supernet 訓練的取樣偏差問題
 3. [35-randomly-wired.pdf](nas-papers/35-randomly-wired.pdf) — 對整個 NAS 範式的批判性觀點
 
-**下一講**：[Lecture 9 Knowledge Distillation](lecture09_kd_note.md)。
+**下一講**：[Lecture 9 Knowledge Distillation](lecture09_kd_note.md)、[Lecture 10 MCUNet](lecture10_mcunet_note.md)。
 
 ---
 
