@@ -735,7 +735,7 @@ Neural network
 | **§4 MCUNetV2 超網路** | **[Lab 3 §13.2](lecture07_08_nas_note.md)** —— Lab 3 用的就是 MCUNetV2 supernet |
 | **§4.1 peak activation 決定可行性** | **[Lab 3 問題 10](lecture07_08_nas_note.md)** —— 為什麼 64 KB 約束不可行 |
 | **§6.3 裝置端訓練** | **On-Device Training Under 256KB Memory**（後續講次） |
-| **§2 TinyEngine** | **Lecture 11**（下一講）＋ **Lab 4** —— 怎麼寫高效 kernel |
+| **§2 TinyEngine** | **[Lecture 11：TinyEngine 與平行運算](lecture11_tinyengine_note.md)**（下一講）＋ **Lab 4/5** —— 怎麼寫高效 kernel |
 | **KD 可以疊在這些小模型上** | **[Lecture 9](lecture09_kd_note.md)** —— 小模型 underfit，正需要額外監督 |
 
 ---
